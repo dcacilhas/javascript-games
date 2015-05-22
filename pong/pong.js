@@ -4,13 +4,13 @@
         var screen = canvas.getContext('2d');
         this.size = { w: canvas.width, h: canvas.height };
         this.center = { x: this.size.w / 2, y: this.size.h / 2 };
-        this.bodies = [];
+        this.entities = [];
 
-        var player1 = new Paddle(20, this.center.y);
-        var player2 = new Paddle(this.size.w - 20, this.size.h / 2);
+        var player = new Player(20, this.center.y);
+        var computer = new Computer(this.size.w - 20, this.size.h / 2);
         var ball = new Ball(this.center.x, this.center.y);
 
-        this.bodies = this.bodies.concat(player1).concat(player2).concat(ball);
+        this.entities = this.entities.concat(player).concat(computer).concat(ball);
 
         var game = this;
         var tick = function() {
@@ -24,16 +24,19 @@
 
     Game.prototype = {
         update: function() {
-
-            for (var i = 0; i < this.bodies.length; i++) {
-                this.bodies[i].update();
-            }
+            // for (var i = 0; i < this.entities.length; i++) {
+            //     this.entities[i].update();
+            // }
 
             // For convenience. Need better way to do this as indexes can change
-            // depending on bodies.concat() order.
-            var p1 = this.bodies[0];
-            var p2 = this.bodies[1];
-            var ball = this.bodies[2];
+            // depending on entities.concat() order.
+            var p1 = this.entities[0];
+            var computer = this.entities[1];
+            var ball = this.entities[2];
+
+            p1.update();
+            computer.update(ball);
+            ball.update();
 
             // TODO: Extract collision checks into general functions
 
@@ -52,31 +55,18 @@
                 ball.velocity.y = -ball.velocity.y;
             }
 
-            // Player1 paddle collision with canvas top/bottom
-            if (p1.top <= 0) {
-                p1.velocity = -p1.velocity;
-            } else if (p1.bottom >= this.size.h) {
-                p1.velocity = -p1.velocity;
-            }
-
-            // Player2 paddle collision with canvas top/bottom
-            if (p2.top <= 0) {
-                p2.velocity = -p2.velocity;
-            } else if (p2.bottom >= this.size.h) {
-                p2.velocity = -p2.velocity;
-            }
-
+            // TODO: Factor this out?
             // Ball collision with Player1
-            if (ball.bottom >= p1.top && ball.top <= p1.bottom) {
-                if (ball.left <= p1.right) {
+            if (ball.bottom >= p1.paddle.top && ball.top <= p1.paddle.bottom) {
+                if (ball.left <= p1.paddle.right) {
                     console.log('P1 hit');
                     ball.velocity.x = -ball.velocity.x;
                 }
             }
 
-            // Ball collision with Player2
-            if (ball.bottom >= p2.top && ball.top <= p2.bottom) {
-                if (ball.right >= p2.left) {
+            // Ball collision with Computer
+            if (ball.bottom >= computer.paddle.top && ball.top <= computer.paddle.bottom) {
+                if (ball.right >= computer.paddle.left) {
                     console.log('P2 hit');
                     ball.velocity.x = -ball.velocity.x;
                 }
@@ -89,29 +79,74 @@
             screen.strokeRect(0, 0, this.size.w, this.size.h);
             screen.fillRect(this.size.w / 2, 0, 1, this.size.h);
 
-            for (var i = 0; i < this.bodies.length; i++) {
-                if (this.bodies[i].draw !== undefined) {
-                    this.bodies[i].draw(screen);
+            for (var i = 0; i < this.entities.length; i++) {
+                if (this.entities[i].draw !== undefined) {
+                    this.entities[i].draw(screen);
                 }
             }
         }
     };
 
-    window.onload = function () {
-        new Game();
+    var Player = function(x, y) {
+        this.x = x;
+        this.y = y;
+        this.paddle = new Paddle(this.x, this.y);
+        this.input = new Input();
+    };
+
+    Player.prototype = {
+        update: function() {
+            if (this.input.isDown(this.input.KEYS.UP)) {
+                this.paddle.velocity = -1;
+            } else if (this.input.isDown(this.input.KEYS.DOWN)) {
+                this.paddle.velocity = 1;
+            } else {
+                this.paddle.velocity = 0;
+            }
+
+            this.paddle.update();
+        },
+
+        draw: function(screen) {
+            this.paddle.draw(screen);
+        }
+    };
+
+    var Computer = function(x, y) {
+        this.x = x;
+        this.y = y;
+        this.paddle = new Paddle(this.x, this.y);
+    };
+
+    Computer.prototype = {
+        update: function(ball) {
+            // Perfect AI
+            // TODO: Add some stupidity
+            if (ball.y < this.paddle.y) {
+                this.paddle.velocity = -1;
+            } else if (ball.y > this.paddle.y) {
+                this.paddle.velocity = 1;
+            } else {
+                this.paddle.velocity = 0;
+            }
+
+            this.paddle.update();
+        },
+
+        draw: function(screen) {
+            this.paddle.draw(screen);
+        }
     };
 
     var Paddle = function(x, y) {
         this.x = x;
         this.y = y;
-        this.velocity = 1;
+        this.velocity = 0;
         this.size = { w: 5, h: 80 };
     };
 
     Paddle.prototype = {
         update: function() {
-            // Move it just to test top/bottom collision
-            // TODO: Add keyboard controls and/or computer AI
             this.y += this.velocity;
 
             this.center = { x: this.x - this.size.w / 2, y: this.y - this.size.h / 2 };
@@ -120,6 +155,12 @@
             this.right = this.x + this.size.w / 2;
             this.top = this.y - this.size.h / 2;
             this.bottom = this.y + this.size.h / 2;
+
+            if (this.top <= 0) {
+                this.y = 0 + this.size.h / 2;
+            } else if (this.bottom >= 300) {
+                this.y = 300 - this.size.h / 2;
+            }
         },
 
         draw: function(screen) {
@@ -168,6 +209,28 @@
             screen.fillRect(this.right, this.top, 1, 1);
             screen.fillRect(this.right, this.bottom, 1, 1);
         }
+    };
+
+    var Input = function() {
+        var keyState = {};
+
+        window.addEventListener('keydown', function(e) {
+            keyState[e.keyCode] = true;
+        });
+
+        window.addEventListener('keyup', function(e) {
+            keyState[e.keyCode] = false;
+        });
+
+        this.isDown = function(keyCode) {
+            return keyState[keyCode] === true;
+        };
+
+        this.KEYS = { UP: 38, DOWN: 40 };
+    };
+
+    window.onload = function () {
+        new Game();
     };
 
     // TODO: Create a general drawRect() function to simplify paddles/ball drawing
